@@ -32,7 +32,7 @@ Python 3.8+
 1. **استنساخ المشروع | Clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/arabic-qa-system.git
+git clone https://github.com/kamalhamidi/interface_araBERT/
 cd arabic-qa-system
 ```
 
