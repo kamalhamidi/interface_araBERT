@@ -1,220 +1,257 @@
 import streamlit as st
-from transformers import pipeline, AutoTokenizer, AutoModelForQuestionAnswering
+from transformers import pipeline
 import torch
 
 # Page configuration
 st.set_page_config(
     page_title="نظام الأسئلة والأجوبة العربي",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_icon="📚",
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for RTL and styling
+# Custom CSS for clean, readable design
 st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
+    
+    * {
+        font-family: 'Tajawal', sans-serif;
+    }
+    
     .main {
         direction: rtl;
         text-align: right;
+        background: #f8f9fa;
     }
-    .stTextArea textarea {
+    
+    .stApp {
+        background: #f8f9fa;
+    }
+    
+    .stTextArea textarea, .stTextInput input {
         direction: rtl;
         text-align: right;
-    }
-    .stTextInput input {
-        direction: rtl;
-        text-align: right;
-    }
-    .answer-box {
-        padding: 20px;
-        background-color: #d4edda;
         border-radius: 10px;
-        border: 2px solid #28a745;
-        direction: rtl;
-        text-align: right;
-        font-size: 18px;
-        margin: 10px 0;
+        border: 2px solid #dee2e6;
+        font-size: 16px;
+        padding: 15px;
+        background: white;
+        color: #212529;
     }
-    .title {
+    
+    .stTextArea textarea:focus, .stTextInput input:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    }
+    
+    .stButton button {
+        background: #0d6efd;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 30px;
+        font-size: 18px;
+        font-weight: 600;
+        width: 100%;
+        transition: background 0.2s;
+    }
+    
+    .stButton button:hover {
+        background: #0b5ed7;
+    }
+    
+    .answer-card {
+        background: white;
+        padding: 25px;
+        border-radius: 10px;
+        border: 2px solid #0d6efd;
+        color: #212529;
+        font-size: 20px;
+        line-height: 1.8;
+        margin: 20px 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .title-main {
         text-align: center;
-        color: #28a745;
-        direction: rtl;
+        color: #212529;
+        font-size: 42px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        margin-top: 20px;
+    }
+    
+    .subtitle {
+        text-align: center;
+        color: #6c757d;
+        font-size: 18px;
+        margin-bottom: 40px;
+    }
+    
+    .section-title {
+        color: #212529;
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        margin-top: 25px;
+    }
+    
+    .confidence-badge {
+        background: #d1e7dd;
+        color: #0f5132;
+        padding: 8px 20px;
+        border-radius: 20px;
+        display: inline-block;
+        font-weight: 600;
+        font-size: 16px;
+        margin-top: 15px;
+        border: 1px solid #badbcc;
+    }
+    
+    .example-card {
+        background: white;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        padding: 12px;
+        margin: 8px 0;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    
+    .example-card:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    hr {
+        border: none;
+        height: 1px;
+        background: #dee2e6;
+        margin: 30px 0;
+    }
+    
+    .footer {
+        text-align: center;
+        color: #6c757d;
+        padding: 30px;
+        font-size: 14px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Title
-st.markdown("<h1 class='title'>🤖 نظام الأسئلة والأجوبة العربي</h1>", unsafe_allow_html=True)
-st.markdown("<h3 class='title'>مدعوم بنموذج AraBERT</h3>", unsafe_allow_html=True)
-st.markdown("---")
+# Header
+st.markdown("<h1 class='title-main'>📚 نظام الأسئلة والأجوبة العربي</h1>", unsafe_allow_html=True)
+st.markdown("<p class='subtitle'>اطرح سؤالك واحصل على الإجابة من النص</p>", unsafe_allow_html=True)
 
-# Sidebar for model configuration
-with st.sidebar:
-    st.header("⚙️ إعدادات النموذج")
-    
-    model_option = st.radio(
-        "اختر طريقة تحميل النموذج:",
-        ["نموذج من Hugging Face Hub", "نموذج محلي"]
-    )
-    
-    if model_option == "نموذج من Hugging Face Hub":
-        model_name = st.text_input(
-            "اسم النموذج:",
-            value="aubmindlab/bert-base-arabertv2",
-            help="مثال: username/model-name أو aubmindlab/bert-base-arabertv2"
-        )
-    else:
-        model_path = st.text_input(
-            "مسار النموذج المحلي:",
-            value="./model",
-            help="المسار إلى مجلد النموذج على جهازك"
-        )
-    
-    st.markdown("---")
-    st.markdown("### 📖 كيفية الاستخدام")
-    st.markdown("""
-    1. أدخل النص العربي
-    2. اكتب سؤالك
-    3. اضغط على زر الإجابة
-    4. جرب الأمثلة المحملة
-    """)
-
-# Cache the model loading
+# Cache the model
 @st.cache_resource
-def load_model(model_name_or_path):
-    """Load the QA model and tokenizer"""
+def load_qa_model():
+    """Load the Arabic QA model"""
     try:
-        with st.spinner("جاري تحميل النموذج..."):
-            tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-            model = AutoModelForQuestionAnswering.from_pretrained(model_name_or_path)
-            qa_pipeline = pipeline(
-                "question-answering",
-                model=model,
-                tokenizer=tokenizer,
-                device=0 if torch.cuda.is_available() else -1
-            )
-            st.success("✅ تم تحميل النموذج بنجاح!")
-            return qa_pipeline
+        qa_pipeline = pipeline(
+            "question-answering",
+            model="ouabdelkrimmina/Arabic-QA-AraBERT",
+            device=0 if torch.cuda.is_available() else -1
+        )
+        return qa_pipeline
     except Exception as e:
-        st.error(f"❌ خطأ في تحميل النموذج: {str(e)}")
+        st.error(f"خطأ في تحميل النموذج: {str(e)}")
         return None
 
 # Example data
-EXAMPLES = {
-    "مثال 1: السيرة الذاتية": {
+EXAMPLES = [
+    {
+        "title": "💼 السيرة الذاتية",
         "context": "محمد بن سلمان هو ولي العهد السعودي ونائب رئيس مجلس الوزراء ووزير الدفاع. ولد في 31 أغسطس 1985 في جدة. يعتبر المهندس الرئيسي لرؤية السعودية 2030، وهي خطة طموحة لتنويع الاقتصاد السعودي وتقليل الاعتماد على النفط.",
         "question": "متى ولد محمد بن سلمان؟"
     },
-    "مثال 2: العلوم": {
-        "context": "الماء هو مركب كيميائي يتكون من ذرتين من الهيدروجين وذرة واحدة من الأكسجين. يغطي الماء حوالي 71% من سطح الأرض. درجة غليان الماء هي 100 درجة مئوية عند مستوى سطح البحر.",
-        "question": "ما هي نسبة تغطية الماء لسطح الأرض؟"
+    {
+        "title": "🔬 العلوم",
+        "context": "الماء هو مركب كيميائي يتكون من ذرتين من الهيدروجين وذرة واحدة من الأكسجين. يغطي الماء حوالي 71% من سطح الأرض. درجة غليان الماء هي 100 درجة مئوية عند مستوى سطح البحر ويتجمد عند درجة صفر مئوية.",
+        "question": "كم نسبة تغطية الماء لسطح الأرض؟"
     },
-    "مثال 3: التاريخ": {
-        "context": "تأسست الدولة السعودية الأولى عام 1744 على يد محمد بن سعود. وفي عام 1932، تم توحيد المملكة العربية السعودية على يد الملك عبد العزيز آل سعود. تعتبر المملكة من أكبر الدول المنتجة للنفط في العالم.",
-        "question": "من قام بتوحيد المملكة العربية السعودية؟"
+    {
+        "title": "📖 التاريخ",
+        "context": "تأسست المملكة العربية السعودية عام 1932 على يد الملك عبد العزيز آل سعود بعد توحيد مناطق شبه الجزيرة العربية. تعتبر المملكة من أكبر الدول المنتجة للنفط في العالم وتحتوي على أقدس المواقع الإسلامية.",
+        "question": "من أسس المملكة العربية السعودية؟"
     }
-}
+]
 
-# Example selector
-col1, col2 = st.columns([3, 1])
-with col2:
-    selected_example = st.selectbox(
-        "اختر مثالاً:",
-        ["لا يوجد"] + list(EXAMPLES.keys())
+# Initialize session state
+if 'context' not in st.session_state:
+    st.session_state.context = ""
+if 'question' not in st.session_state:
+    st.session_state.question = ""
+
+# Main container
+with st.container():
+    # Examples section
+    st.markdown("<p class='section-title'>جرب الأمثلة التالية:</p>", unsafe_allow_html=True)
+    
+    cols = st.columns(3)
+    for idx, example in enumerate(EXAMPLES):
+        with cols[idx]:
+            if st.button(example["title"], key=f"example_{idx}", use_container_width=True):
+                st.session_state.context = example["context"]
+                st.session_state.question = example["question"]
+                st.rerun()
+    
+    st.markdown("<hr>", unsafe_allow_html=True)
+    
+    # Context input
+    st.markdown("<p class='section-title'>النص:</p>", unsafe_allow_html=True)
+    context = st.text_area(
+        "context",
+        value=st.session_state.context,
+        height=150,
+        placeholder="أدخل النص الذي تريد طرح سؤال عنه...",
+        label_visibility="collapsed"
     )
-
-# Main content area
-col_context, col_question = st.columns(2)
-
-with col_context:
-    st.subheader("📄 النص (السياق)")
-    if selected_example != "لا يوجد":
-        context = st.text_area(
-            "أدخل النص الذي تريد طرح سؤال عنه:",
-            value=EXAMPLES[selected_example]["context"],
-            height=200,
-            key="context",
-            label_visibility="collapsed"
-        )
-    else:
-        context = st.text_area(
-            "أدخل النص الذي تريد طرح سؤال عنه:",
-            height=200,
-            key="context",
-            label_visibility="collapsed",
-            placeholder="الرجاء إدخال النص هنا..."
-        )
-
-with col_question:
-    st.subheader("❓ السؤال")
-    if selected_example != "لا يوجد":
-        question = st.text_input(
-            "ما هو سؤالك؟",
-            value=EXAMPLES[selected_example]["question"],
-            key="question",
-            label_visibility="collapsed"
-        )
-    else:
-        question = st.text_input(
-            "ما هو سؤالك؟",
-            key="question",
-            label_visibility="collapsed",
-            placeholder="اكتب سؤالك هنا..."
-        )
-
-# Get Answer button
-col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-with col_btn1:
-    get_answer = st.button("🎯 احصل على الإجابة", use_container_width=True, type="primary")
-with col_btn2:
-    clear_btn = st.button("🗑️ مسح", use_container_width=True)
-
-if clear_btn:
-    st.rerun()
-
-# Process and display answer
-if get_answer:
-    if not context.strip() or not question.strip():
-        st.warning("⚠️ الرجاء إدخال النص والسؤال")
-    else:
-        # Load model
-        if model_option == "نموذج من Hugging Face Hub":
-            qa_model = load_model(model_name)
+    
+    # Question input
+    st.markdown("<p class='section-title'>السؤال:</p>", unsafe_allow_html=True)
+    question = st.text_input(
+        "question",
+        value=st.session_state.question,
+        placeholder="اكتب سؤالك هنا...",
+        label_visibility="collapsed"
+    )
+    
+    # Submit button
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔍 احصل على الإجابة", use_container_width=True):
+        if not context.strip() or not question.strip():
+            st.warning("⚠️ الرجاء إدخال النص والسؤال")
         else:
-            qa_model = load_model(model_path)
-        
-        if qa_model:
-            try:
-                with st.spinner("🔍 جاري البحث عن الإجابة..."):
-                    result = qa_model(question=question, context=context)
-                    
-                    # Display answer
-                    st.markdown("---")
-                    st.subheader("✨ الإجابة")
-                    st.markdown(
-                        f"<div class='answer-box'>{result['answer']}</div>",
-                        unsafe_allow_html=True
-                    )
-                    
-                    # Display confidence score
-                    col_score1, col_score2, col_score3 = st.columns(3)
-                    with col_score2:
-                        confidence = result['score'] * 100
-                        st.metric("درجة الثقة", f"{confidence:.2f}%")
-                    
-                    # Display additional info
-                    with st.expander("📊 معلومات إضافية"):
-                        st.write(f"**موقع الإجابة في النص:** من الحرف {result['start']} إلى {result['end']}")
-                        st.write(f"**درجة الثقة الدقيقة:** {result['score']:.4f}")
+            with st.spinner("جاري البحث عن الإجابة..."):
+                qa_model = load_qa_model()
+                
+                if qa_model:
+                    try:
+                        result = qa_model(question=question, context=context)
                         
-            except Exception as e:
-                st.error(f"❌ حدث خطأ أثناء معالجة السؤال: {str(e)}")
+                        # Display answer
+                        st.markdown("<hr>", unsafe_allow_html=True)
+                        st.markdown("<p class='section-title'>الإجابة:</p>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"<div class='answer-card'><strong>{result['answer']}</strong></div>",
+                            unsafe_allow_html=True
+                        )
+                        
+                        # Confidence score
+                        confidence = result['score'] * 100
+                        st.markdown(
+                            f"<div style='text-align: center;'><span class='confidence-badge'>درجة الثقة: {confidence:.1f}%</span></div>",
+                            unsafe_allow_html=True
+                        )
+                        
+                    except Exception as e:
+                        st.error(f"❌ حدث خطأ: {str(e)}")
 
 # Footer
-st.markdown("---")
 st.markdown("""
-<div style='text-align: center; color: #666; direction: rtl;'>
-    <p>تم بناء هذا النظام باستخدام AraBERT و Streamlit</p>
-    <p>للحصول على أفضل النتائج، استخدم أسئلة واضحة ومحددة</p>
+<div class='footer'>
+    <p>مدعوم بنموذج AraBERT المدرب على بيانات عربية</p>
 </div>
 """, unsafe_allow_html=True)
