@@ -137,6 +137,54 @@ st.markdown("""
         padding: 30px;
         font-size: 14px;
     }
+    
+    .history-card {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .history-card:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    
+    .history-question {
+        color: #212529;
+        font-weight: 600;
+        font-size: 16px;
+        margin-bottom: 8px;
+    }
+    
+    .history-answer {
+        color: #6c757d;
+        font-size: 14px;
+        margin-bottom: 5px;
+    }
+    
+    .history-time {
+        color: #adb5bd;
+        font-size: 12px;
+    }
+    
+    .clear-history-btn {
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .clear-history-btn:hover {
+        background: #bb2d3b;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -183,6 +231,8 @@ if 'context' not in st.session_state:
     st.session_state.context = ""
 if 'question' not in st.session_state:
     st.session_state.question = ""
+if 'history' not in st.session_state:
+    st.session_state.history = []
 
 # Main container
 with st.container():
@@ -231,6 +281,21 @@ with st.container():
                     try:
                         result = qa_model(question=question, context=context)
                         
+                        # Save to history
+                        from datetime import datetime
+                        history_item = {
+                            'question': question,
+                            'answer': result['answer'],
+                            'context': context,
+                            'confidence': result['score'] * 100,
+                            'time': datetime.now().strftime("%Y-%m-%d %H:%M")
+                        }
+                        st.session_state.history.insert(0, history_item)
+                        
+                        # Keep only last 10 items
+                        if len(st.session_state.history) > 10:
+                            st.session_state.history = st.session_state.history[:10]
+                        
                         # Display answer
                         st.markdown("<hr>", unsafe_allow_html=True)
                         st.markdown("<p class='section-title'>الإجابة:</p>", unsafe_allow_html=True)
@@ -248,6 +313,37 @@ with st.container():
                         
                     except Exception as e:
                         st.error(f"❌ حدث خطأ: {str(e)}")
+
+# History section
+if st.session_state.history:
+    st.markdown("<hr>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("<p class='section-title'>📋 السجل (آخر 10 أسئلة):</p>", unsafe_allow_html=True)
+    with col2:
+        if st.button("مسح السجل", key="clear_history"):
+            st.session_state.history = []
+            st.rerun()
+    
+    for idx, item in enumerate(st.session_state.history):
+        with st.container():
+            if st.button(
+                f" {item['question'][:60]}{'...' if len(item['question']) > 60 else ''}",
+                key=f"history_{idx}",
+                use_container_width=True
+            ):
+                st.session_state.context = item['context']
+                st.session_state.question = item['question']
+                st.rerun()
+            
+            st.markdown(f"""
+                <div style='background: #f8f9fa; padding: 10px; border-radius: 6px; margin-bottom: 10px;'>
+                    <div class='history-answer'>✅ {item['answer']}</div>
+                    <div class='history-time'>🕐 {item['time']} | درجة الثقة: {item['confidence']:.1f}%</div>
+                </div>
+            """, unsafe_allow_html=True)
+
 
 # Footer
 st.markdown("""
